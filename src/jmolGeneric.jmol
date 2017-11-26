@@ -1,0 +1,285 @@
+function initialization()
+{	
+	model 1.1
+	set selectHetero ON
+
+	ID_AAA  = {"0" : "noGroup", "1" : "ALA", "2" : "ARG", "3" : "ASN", "4" : "ASP",
+	"5" : "CYS", "6" : "GLN", "7" : "GLU", "8" : "GLY", "9" : "HIS", "10" : "ILE",
+	"11" : "LEU", "12" : "LYS", "13" : "MET", "14" : "PHE", "15" : "PRO", "16" :
+	"SER", "17" : "THR", "18" : "TRP", "19" : "TYR", "20" : "VAL", "21" : "ASX",
+	"22" : "GLX", "23" : "UNK"};
+
+	
+	var entete = getProperty('fileHeader')
+	var lignes_entete = entete.split("\n");
+	chaines = {}
+
+	// Temp vars for PART I
+	var chaine_courante_id = "";
+	var chaine_courante = array();
+
+	for(i = 1; i <= lignes_entete.size; i++) 
+	{
+	  // Verifie si la ligne contient un SEQRES
+	  if(lignes_entete[i].find("SEQRES")) 
+	  {
+
+	    // stocker une ligne SEQRES
+	    var ligne_SEQRES = lignes_entete[i];
+
+	    // stocker l'identitifiant de la chaine
+	    var chaine_id = ligne_SEQRES[12][12];
+	    //print ("id: "+chaine_id);
+
+	    // si on rencontre une nouvelle chaine:
+	    if(chaine_id != chaine_courante_id) 
+	    {
+		 // Et si cet identifiant de chaine n'est pas vide, 
+		 if(chaine_courante_id != "")
+		 { 
+		   //on copie "chaine_courante" dans la structure chaines avant de tout réinitialiser.
+		   chaines[chaine_courante_id] = chaine_courante;
+		 } 
+		 
+		 chaine_courante_id = chaine_id;
+		 chaine_courante = array();
+	    }
+	    
+	    // récuperer les residus (acides aminés) de la chaine
+	    acides_amines = ligne_SEQRES[20][70].split(" ");
+	    //print acides_amines;
+	    
+	    // Concatener chaque residu (de la meme chaine) dans le tableau "chaine_courante"
+	    for(j = 1; j <= acides_amines.size; j++) 
+	    {
+		 // si c'est bien un acide_amines (taille = 3)
+		 if (acides_amines[j].length == 3)
+		 {
+		   chaine_courante = chaine_courante + acides_amines[j];
+		   //chaines[chaine_courante_id].push(acides_amines[j]);
+		   //print acides_amines[j];
+		 }  
+	    }
+	  }
+	}
+	// copier le dernier tour de boucle dans la derniere chaine.
+	chaines[chaine_courante_id] = chaine_courante;
+	show chaines;
+}
+
+// Recherche des residus modifiés
+function showModRes()
+{
+	var MODRES = {};
+	for(i = 1; i <= lignes_entete.size; i++) 
+	{
+	  // si la ligne contient "MODRES"
+	  if(lignes_entete[i].find("MODRES")) 
+	  {
+	    var line_MODRES = lignes_entete[i];
+	    var residus_original = line_MODRES[13][15]
+	    var residus_modifiant = line_MODRES[25][27]
+	    MODRES[residus_original] = residus_modifiant
+	  }
+	}
+	print MODRES;
+
+}
+//--------------------------------------------
+//      PART II : set property_seqresno
+//------------------------------------------->
+
+
+function numbering()
+{
+	chains_keys = chaines.keys;
+	
+
+	// TODO Check missing residues and HOH values
+	// Loop over chains to set seqResNo
+	for(i = 1; i <= chains_keys.size; i++) 
+	{
+	  curr_chain_id = chains_keys[i];
+	  print "Chain ID : " + curr_chain_id;
+	  // le 2eme param indique une selection d'un sous ensemble d'atomes (ceux de la chaine H par ex).
+	  chain_info = getproperty('chainInfo',{chain=curr_chain_id});
+	  // filtre pour eliminer toutes l'entete pour ne garder que la structure elementaire de la chaine. ??
+	  curr_chain = chain_info['models'][mod_id]['chains'][1]['residues'];
+	  //print curr_chain.size;
+
+	  // Index to go through atoms list of chain_info
+	  atom_ind = 1;
+	  // Loop over SEQRES residues list
+
+	  for(seqres_ind = 1; seqres_ind <= curr_chain.size; seqres_ind++) 
+	  {
+	    insert = "";
+	    seqres_group = chaines[curr_chain_id][seqres_ind];
+	    //print seqres_group;
+
+	    my_resno = curr_chain[atom_ind]['seqCode']
+	    //print "my_resno: " + my_resno;
+	    
+	    // test sur l'insertion
+	    if(my_resno.find("^")) 
+	    { 
+		 var insertions = my_resno.split("^");
+		 insert = insertions[2];  my_resno = insertions[1];
+		 print "insert : " + insert; 
+	    }
+
+	    my_resno = 0 + my_resno;
+	    
+
+
+
+	    // If this is a modified residue
+	    if(ID_AAA[curr_chain[atom_ind]['groupID']] == "") 
+	    {
+		 atom_group = curr_chain[atom_ind]['atomInfo2'][2][4] // Other possibility to get groupID
+		 //seqres_group = chains[curr_chain_id][seqres_ind]
+	    } 
+	    else 
+	    {
+		 atom_group = ID_AAA[curr_chain[atom_ind]['groupID']] // Other possibility to get groupID
+	    }
+	    //atomno = curr_chain[atom_ind]['_apt2']
+	    //atom_group = {atomno = atomno}.group
+
+	    //print "SEQRES element : " + seqres_group
+	    //print "ATOM element : " + atom_group
+	    
+	    if(atom_group == seqres_group) 
+	    {
+		 if(insert != "")
+		 {
+		   {resno = my_resno and insertion = insert}.property_seqresno = seqres_ind; 
+		   // print "{resno = " + my_resno + " and insertion = " + insert + "}.property_seqresno: "+ {resno = my_resno and insertion = insert}.property_seqresno ;
+		 }
+		 else
+		 {
+		   {resno = my_resno}.property_seqresno = seqres_ind; 
+		  // print "{resno = " + my_resno + " }.property_seqresno: "+ {resno = my_resno}.property_seqresno ;
+		 }
+		 atom_ind++;
+		 
+	    }
+	  }
+
+	}
+
+}
+
+function alignment()
+{	
+	//tab = array();
+	// SET QRESNO
+	var chaines_info = getproperty('chainInfo')['models'][mod_id]['chains']; // contient la structure de toutes les chaines
+	//print chaines_info;
+
+	for(i = 0; i < chaines_info.size; i++) 
+	{
+	  
+	  var chaine_info = chaines_info[i] ; // contient la structure d'une chaine.
+	  //print chaine_info;
+	  
+	  for(j = 1; j <= chaine_info['residues'].size; j++) 
+	  {
+	    
+	    var res = chaine_info['residues'][j];
+	    mon_resno = (0 + res['seqCode']);
+	    
+	    seqresno = {resno = mon_resno}.property_seqresno;
+	    //print seqresno;
+	    
+	    if(seqresno >= (0 + Hsp_hit_from) && seqresno <= (0 + Hsp_hit_to)) //si le residue est present dans la partie aligné de la sequence hit.
+	    {
+		 
+		 // set QresNo
+		 {resno = mon_resno}.property_qresno = (0 + Hsp_query_from) - (0 + Hsp_hit_from) + seqresno;    // pour prendre en compte la nouvelle numerotation 
+		 //atom = {resno = mon_resno and atomname="CA" and model = 1.1}.property_qresno
+		 //		tab.push(atom);
+		 
+		 //print "seqresno: " + seqresno;
+		 
+		 var compteur_local = seqresno - (0 + Hsp_hit_from) + 1;  //recupere le code a une lettre de la hit.                          
+		 //print Hsp_hseq[compteur_local];
+
+		 // Set Qsmil
+		 if(Hsp_qseq[compteur_local] == '-')
+		 {
+		   {resno = mon_resno}.property_qresno = 0;  // gaps
+		 }
+		 elseif(Hsp_midline[compteur_local] == '+') 
+		 {
+		   {resno = mon_resno}.property_qsimil = 1;  // residu aligné similaire
+		 } 
+		 elseif (Hsp_midline[compteur_local] == ' ') 
+		 {
+		   {resno = mon_resno}.property_qsimil = 0; // residu aligné dissimilaire
+		 } 
+		 else 
+		 {
+		   {resno = mon_resno}.property_qsimil = 2;  //residu aligné identique
+		 }
+		 
+		 print "{resno = " + mon_resno + " }.property_qresno = " + {resno = mon_resno}.property_qresno;
+		 print "{resno = " + mon_resno + " }.property_qsimil = " + {resno = mon_resno}.property_qsimil;
+	    } 
+	    else 
+	    {
+		 {resno = mon_resno}.property_qresno = -1;       // residu ne fait pas partie du segment aligné 
+		 {resno = mon_resno}.property_qsimil = -1;       // residu non aligné 
+
+		 //print "{resno = " + mon_resno + " }.property_qresno = " + {resno = mon_resno}.property_qresno;
+		 //print "{resno = " + mon_resno + " }.property_qsimil = " + {resno = mon_resno}.property_qsimil;
+	    } 
+	    
+	    
+	  }
+	  //TODO: verifier le cas d'un residue aligné avec un gap: qresno = 0
+	  
+
+	}
+	
+	//return {atomname="CA" and property_qsimil > 0 and model=1.1 };
+	//return tab;
+}
+
+function superpose()
+{
+	tab = array();
+	
+	
+	for(i = (0 + Hsp_hit_from); i <= (0 + Hsp_hit_to); i++) 
+	{
+		atoms = {atomname="CA" and model=1.1 and property_qresno = i }
+		if (atoms != "")
+		{
+			tab.push(i);
+			print 
+		}
+	}
+	return tab;
+}
+
+load Data/2kb3.pdb 
+script Data/Resultats_BLAST_pour_Jmol/BLAST_alignement_tous/BLAST_result_02.jmol
+
+initialization()
+numbering()
+alignment();
+Ai = superpose();
+
+load Data/2kfu.pdb 
+script Data/Resultats_BLAST_pour_Jmol/BLAST_alignement1_2KFU-A.jmol
+
+initialization()
+numbering()
+alignment();
+Bi = superpose();
+
+load Data/2kb3.pdb 
+load append Data/2kb4.pdb 
+
+compare{1.1}{1.2} SUBSET {*.CA} ATOMS {Ai} {Bi} ROTATE TRANSLATE
